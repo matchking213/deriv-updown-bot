@@ -448,13 +448,8 @@ function TraderPage() {
     }
     currentStakeRef.current = base;
     setCurrentStake(base);
-    pnlRef.current = 0;
-    setPnl(0);
-    setWins(0);
-    setLosses(0);
     runningRef.current = true;
 
-    runningRef.current = true;
     setRunning(true);
     toast.success(
       `Bot started — ${direction === "RUNHIGH" ? "UPS only" : "DOWNS only"}, ${Math.max(2, parseInt(ticks) || 2)} ticks`
