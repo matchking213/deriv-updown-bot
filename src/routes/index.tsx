@@ -710,9 +710,22 @@ function TraderPage() {
 
         {/* History */}
         <section className="panel p-5">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Trade history
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Trade history
+            </h2>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={clearHistory}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Clear history
+              </Button>
+              <Button variant="secondary" size="sm" onClick={resetStats}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset stats
+              </Button>
+            </div>
+          </div>
+
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">No trades yet.</p>
           ) : (
