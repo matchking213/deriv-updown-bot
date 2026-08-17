@@ -98,32 +98,36 @@ interface TradeRow {
 }
 
 function TraderPage() {
-  const [token, setToken] = useState("");
+  const s = loadStore();
+  const [token, setToken] = useState(s.token || "");
   const [connecting, setConnecting] = useState(false);
   const [account, setAccount] = useState<{
     loginid: string;
     currency: string;
     mode: string;
   } | null>(null);
+  const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [balance, setBalance] = useState(0);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const [symbol, setSymbol] = useState("R_100");
-  const [direction, setDirection] = useState<Direction>("RUNHIGH");
-  const [entryMode, setEntryMode] = useState<EntryMode>("normal");
-  const [ticks, setTicks] = useState("2");
-  const [stake, setStake] = useState("0.35");
-  const [martingale, setMartingale] = useState("2");
-  const [takeProfit, setTakeProfit] = useState("10");
-  const [stopLoss, setStopLoss] = useState("10");
+  const [symbol, setSymbol] = useState(s.symbol || "R_100");
+  const [direction, setDirection] = useState<Direction>((s.direction as Direction) || "RUNHIGH");
+  const [entryMode, setEntryMode] = useState<EntryMode>((s.entryMode as EntryMode) || "normal");
+  const [ticks, setTicks] = useState(s.ticks || "2");
+  const [stake, setStake] = useState(s.stake || "0.35");
+  const [martingale, setMartingale] = useState(s.martingale || "2");
+  const [takeProfit, setTakeProfit] = useState(s.takeProfit || "10");
+  const [stopLoss, setStopLoss] = useState(s.stopLoss || "10");
 
   const [running, setRunning] = useState(false);
-  const [currentStake, setCurrentStake] = useState(0.35);
-  const [pnl, setPnl] = useState(0);
-  const [wins, setWins] = useState(0);
-  const [losses, setLosses] = useState(0);
+  const [currentStake, setCurrentStake] = useState(parseFloat(s.stake || "0.35") || 0.35);
+  const [pnl, setPnl] = useState(s.pnl ?? 0);
+  const [wins, setWins] = useState(s.wins ?? 0);
+  const [losses, setLosses] = useState(s.losses ?? 0);
   const [price, setPrice] = useState<string>("—");
   const [openTrades, setOpenTrades] = useState(0);
-  const [history, setHistory] = useState<TradeRow[]>([]);
+  const [history, setHistory] = useState<TradeRow[]>((s.history as TradeRow[]) || []);
+
 
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const wsRef = useRef<DerivWS | null>(null);
