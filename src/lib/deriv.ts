@@ -280,6 +280,9 @@ export async function authorizeDeriv(rawToken: string): Promise<DerivAuthResult>
   const account = accounts.find((a) => !a.is_virtual) || accounts[0];
   if (!account) throw new Error("No Deriv options account found for this PAT token");
   return connectPatAccount(token, account, accounts);
+}
+
+
 
 
 export interface BuyResult {
