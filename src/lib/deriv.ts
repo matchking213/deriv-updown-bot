@@ -236,7 +236,7 @@ export async function buyRiseFall(
   ws: DerivWS,
   opts: {
     symbol: string;
-    contract_type: "CALL" | "PUT";
+    contract_type: "RUNHIGH" | "RUNLOW";
     stake: number;
     ticks: number;
     currency: string;

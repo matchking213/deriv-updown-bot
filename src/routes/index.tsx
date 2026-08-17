@@ -36,7 +36,7 @@ export const Route = createFileRoute("/")({
   component: TraderPage,
 });
 
-type Direction = "CALL" | "PUT";
+type Direction = "RUNHIGH" | "RUNLOW";
 type EntryMode = "normal" | "everyTick";
 
 interface TradeRow {
@@ -59,7 +59,7 @@ function TraderPage() {
   const [balance, setBalance] = useState(0);
 
   const [symbol, setSymbol] = useState("R_100");
-  const [direction, setDirection] = useState<Direction>("CALL");
+  const [direction, setDirection] = useState<Direction>("RUNHIGH");
   const [entryMode, setEntryMode] = useState<EntryMode>("normal");
   const [ticks, setTicks] = useState("2");
   const [stake, setStake] = useState("0.35");
@@ -306,7 +306,7 @@ function TraderPage() {
     runningRef.current = true;
     setRunning(true);
     toast.success(
-      `Bot started — ${direction === "CALL" ? "UPS only" : "DOWNS only"}, ${Math.max(2, parseInt(ticks) || 2)} ticks`
+      `Bot started — ${direction === "RUNHIGH" ? "UPS only" : "DOWNS only"}, ${Math.max(2, parseInt(ticks) || 2)} ticks`
     );
   };
 
@@ -416,16 +416,16 @@ function TraderPage() {
               </Label>
               <div className="grid grid-cols-2 gap-2">
                 <Button
-                  variant={direction === "CALL" ? "default" : "secondary"}
+                  variant={direction === "RUNHIGH" ? "default" : "secondary"}
                   disabled={running}
-                  onClick={() => setDirection("CALL")}
+                  onClick={() => setDirection("RUNHIGH")}
                 >
                   <ArrowUpRight className="mr-2 h-4 w-4" /> Ups only
                 </Button>
                 <Button
-                  variant={direction === "PUT" ? "destructive" : "secondary"}
+                  variant={direction === "RUNLOW" ? "destructive" : "secondary"}
                   disabled={running}
-                  onClick={() => setDirection("PUT")}
+                  onClick={() => setDirection("RUNLOW")}
                 >
                   <ArrowDownRight className="mr-2 h-4 w-4" /> Downs only
                 </Button>
@@ -526,7 +526,7 @@ function TraderPage() {
               {history.map((t) => (
                 <div key={t.id} className="flex items-center justify-between py-2 text-sm">
                   <span className="flex items-center gap-2">
-                    {t.dir === "CALL" ? (
+                    {t.dir === "RUNHIGH" ? (
                       <ArrowUpRight className="h-4 w-4 text-up" />
                     ) : (
                       <ArrowDownRight className="h-4 w-4 text-down" />
