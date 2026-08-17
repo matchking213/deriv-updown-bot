@@ -531,22 +531,70 @@ function TraderPage() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Stat label="Account" value={account.loginid} />
-                <Stat label="Mode" value={account.mode.toUpperCase()} />
-                <Stat
-                  label="Balance"
-                  value={`${balance.toFixed(2)} ${account.currency}`}
-                  accent
-                />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Stat label="Account" value={account.loginid} />
+                  <Stat label="Mode" value={account.mode.toUpperCase()} />
+                  <Stat
+                    label="Balance"
+                    value={`${balance.toFixed(2)} ${account.currency}`}
+                    accent
+                  />
+                </div>
+                <Button variant="secondary" onClick={disconnect}>
+                  <Power className="mr-2 h-4 w-4" />
+                  Disconnect
+                </Button>
               </div>
-              <Button variant="secondary" onClick={disconnect}>
-                <Power className="mr-2 h-4 w-4" />
-                Disconnect
-              </Button>
+
+              <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
+                <div className="min-w-56 space-y-1.5">
+                  <Label
+                    htmlFor="acct"
+                    className="text-xs uppercase tracking-wide text-muted-foreground"
+                  >
+                    Account (real / demo)
+                  </Label>
+                  <select
+                    id="acct"
+                    value={account.loginid}
+                    disabled={running || connecting}
+                    onChange={(e) => switchAccount(e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-secondary px-3 text-sm"
+                  >
+                    {(accounts.length
+                      ? accounts
+                      : [
+                          {
+                            account_id: account.loginid,
+                            label: account.loginid,
+                            currency: account.currency,
+                            balance,
+                            is_virtual: false,
+                          },
+                        ]
+                    ).map((a) => (
+                      <option key={a.account_id} value={a.account_id}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button variant="secondary" onClick={refreshBalance}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Update balance
+                </Button>
+                <Button
+                  variant={autoRefresh ? "default" : "secondary"}
+                  onClick={() => setAutoRefresh((v) => !v)}
+                >
+                  Auto refresh {autoRefresh ? "on" : "off"}
+                </Button>
+              </div>
             </div>
           )}
+
         </section>
 
         {/* Settings */}
