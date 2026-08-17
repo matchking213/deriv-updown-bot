@@ -231,12 +231,12 @@ export interface BuyResult {
   payout: number;
 }
 
-/** Buy a Rise (CALL) or Fall (PUT) tick contract. */
+/** Buy an Only Ups (RUNHIGH) or Only Downs (RUNLOW) runs contract. Duration 2-5 ticks. */
 export async function buyRiseFall(
   ws: DerivWS,
   opts: {
     symbol: string;
-    contract_type: "CALL" | "PUT";
+    contract_type: "RUNHIGH" | "RUNLOW";
     stake: number;
     ticks: number;
     currency: string;
@@ -248,7 +248,7 @@ export async function buyRiseFall(
     basis: "stake",
     contract_type: opts.contract_type,
     currency: opts.currency || "USD",
-    duration: Math.max(2, Math.round(opts.ticks)),
+    duration: Math.min(5, Math.max(2, Math.round(opts.ticks))),
     duration_unit: "t",
   };
 
