@@ -292,7 +292,12 @@ function TraderPage() {
     }
   };
 
+  const connectRef = useRef<
+    ((t: string, a?: string, silent?: boolean) => Promise<void>) | null
+  >(null);
+
   const attachSocket = useCallback(
+
     (res: { ws: DerivWS; loginid: string; currency: string; mode: string }, rawToken: string) => {
       wsRef.current = res.ws;
       setAccount({ loginid: res.loginid, currency: res.currency, mode: res.mode });
