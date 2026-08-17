@@ -9,13 +9,34 @@ const DERIV_REST_BASE = "https://api.derivws.com/trading/v1/options";
 
 export type DerivMode = "legacy" | "pat";
 
+export interface DerivAccount {
+  account_id: string;
+  currency: string;
+  balance: number;
+  is_virtual: boolean;
+  label: string;
+}
+
 export interface DerivAuthResult {
   ws: DerivWS;
   loginid: string;
   currency: string;
   balance: number;
   mode: DerivMode;
+  accounts: DerivAccount[];
 }
+
+/** Deriv applies app markup per app_id — always pin our 0% markup app id on the socket URL. */
+function withAppId(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("app_id", DERIV_NEW_APP_ID);
+    return u.toString();
+  } catch {
+    return url.includes("app_id=") ? url : `${url}${url.includes("?") ? "&" : "?"}app_id=${DERIV_NEW_APP_ID}`;
+  }
+}
+
 
 export function detectTokenMode(token: string): DerivMode {
   // Legacy Deriv API tokens are short (~15 chars) alphanumeric strings.
