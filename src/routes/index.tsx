@@ -302,7 +302,7 @@ function TraderPage() {
         // Automatic reconnect with the persisted token.
         setTimeout(() => {
           if (!wsRef.current || !wsRef.current.isOpen) {
-            connectWith(rawToken, loadStore().accountId, true).catch(() => {});
+            connectRef.current?.(rawToken, loadStore().accountId, true).catch(() => {});
           }
         }, 3000);
       };
