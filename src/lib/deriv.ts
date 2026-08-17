@@ -1,7 +1,7 @@
 export const DERIV_LEGACY_APP_ID = "1089";
 
 // PAT tokens use Deriv's new PAT-format App ID.
-export const DERIV_NEW_APP_ID = "33uaaVh8xkm8lpUWTHDkm";
+export const DERIV_NEW_APP_ID = "348IjGrNee0FZhWeA3qzx";
 
 const DERIV_LEGACY_WS = `wss://ws.derivws.com/websockets/v3?app_id=${DERIV_LEGACY_APP_ID}`;
 
