@@ -349,6 +349,9 @@ function TraderPage() {
     },
     [attachSocket, startTicks]
   );
+  connectRef.current = connectWith;
+
+
 
   const connect = () => {
     // Fall back to the live input value: some browsers/paste flows don't fire change.
