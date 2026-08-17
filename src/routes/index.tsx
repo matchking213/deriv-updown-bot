@@ -292,37 +292,70 @@ function TraderPage() {
     }
   };
 
-  const connect = async () => {
-    // Fall back to the live input value: some browsers/paste flows don't fire change.
-    const raw = (tokenInputRef.current?.value || token).trim();
-    if (!raw) {
-      toast.error("Enter your Deriv PAT (or API) token");
-      return;
-    }
-    if (raw !== token) setToken(raw);
-    setConnecting(true);
-    try {
-      const res = await authorizeDeriv(raw);
+  const attachSocket = useCallback(
+    (res: { ws: DerivWS; loginid: string; currency: string; mode: string }, rawToken: string) => {
       wsRef.current = res.ws;
-
       setAccount({ loginid: res.loginid, currency: res.currency, mode: res.mode });
-      setBalance(res.balance);
       res.ws.onClose = () => {
-        stopBot("Deriv connection closed");
+        stopBot("Deriv connection closed — reconnecting…");
         setAccount(null);
+        // Automatic reconnect with the persisted token.
+        setTimeout(() => {
+          if (!wsRef.current || !wsRef.current.isOpen) {
+            connectWith(rawToken, loadStore().accountId, true).catch(() => {});
+          }
+        }, 3000);
       };
       res.ws.onMessage((msg) => {
         if (msg?.msg_type === "tick" && msg.tick) tickHandler.current(msg.tick);
-        if (msg?.msg_type === "balance" && msg.balance) setBalance(Number(msg.balance.balance ?? 0));
+        if (msg?.msg_type === "balance" && msg.balance)
+          setBalance(Number(msg.balance.balance ?? 0));
       });
       res.ws.send({ balance: 1, subscribe: 1 }).catch(() => {});
-      await startTicks(res.ws, symbol);
-      toast.success(`Connected as ${res.loginid} (${res.mode.toUpperCase()})`);
-    } catch (e: any) {
-      toast.error(e?.message || "Connection failed");
-    } finally {
-      setConnecting(false);
-    }
+    },
+    [stopBot]
+  );
+
+  const connectWith = useCallback(
+    async (rawToken: string, accountId?: string, silent = false) => {
+      const raw = (rawToken || "").trim();
+      if (!raw) {
+        if (!silent) toast.error("Enter your Deriv PAT (or API) token");
+        return;
+      }
+      setConnecting(true);
+      try {
+        const res = accountId
+          ? await authorizeDerivAccount(raw, accountId)
+          : await authorizeDeriv(raw);
+        tokenRef.current = raw;
+        setToken(raw);
+        setAccounts(res.accounts);
+        setBalance(res.balance);
+        saveStore({ token: raw, accountId: res.loginid });
+        attachSocket(res, raw);
+        await startTicks(res.ws, cfgRef.current.symbol);
+        if (!silent) toast.success(`Connected as ${res.loginid} (${res.mode.toUpperCase()})`);
+      } catch (e: any) {
+        if (!silent) toast.error(e?.message || "Connection failed");
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [attachSocket, startTicks]
+  );
+
+  const connect = () => {
+    // Fall back to the live input value: some browsers/paste flows don't fire change.
+    const raw = (tokenInputRef.current?.value || token).trim();
+    connectWith(raw);
+  };
+
+  const switchAccount = async (accountId: string) => {
+    stopBot();
+    wsRef.current?.close();
+    wsRef.current = null;
+    await connectWith(tokenRef.current || token, accountId);
   };
 
   const disconnect = () => {
@@ -333,6 +366,59 @@ function TraderPage() {
     setPrice("—");
   };
 
+  /** Manual + continuous balance refresh */
+  const refreshBalance = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || !ws.isOpen) return;
+    ws.send({ balance: 1 })
+      .then((r: any) => {
+        if (r?.balance) setBalance(Number(r.balance.balance ?? 0));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh || !account) return;
+    const id = window.setInterval(refreshBalance, 250);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, account, refreshBalance]);
+
+  const clearHistory = () => {
+    setHistory([]);
+    saveStore({ history: [] });
+    toast.success("Trade history cleared");
+  };
+
+  const resetStats = () => {
+    pnlRef.current = 0;
+    setPnl(0);
+    setWins(0);
+    setLosses(0);
+    const base = round2(parseFloat(cfgRef.current.stake) || 0.35);
+    currentStakeRef.current = base;
+    setCurrentStake(base);
+    saveStore({ pnl: 0, wins: 0, losses: 0 });
+    toast.success("Stats reset");
+  };
+
+  /** Persist settings + stats */
+  useEffect(() => {
+    saveStore({ symbol, direction, entryMode, ticks, stake, martingale, takeProfit, stopLoss });
+  }, [symbol, direction, entryMode, ticks, stake, martingale, takeProfit, stopLoss]);
+
+  useEffect(() => {
+    saveStore({ history, pnl, wins, losses });
+  }, [history, pnl, wins, losses]);
+
+  /** Auto reconnect on load with the stored token */
+  const bootRef = useRef(false);
+  useEffect(() => {
+    if (bootRef.current) return;
+    bootRef.current = true;
+    const stored = loadStore();
+    if (stored.token) connectWith(stored.token, stored.accountId, true);
+  }, [connectWith]);
+
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || !ws.isOpen) return;
@@ -340,6 +426,7 @@ function TraderPage() {
   }, [symbol, startTicks]);
 
   useEffect(() => () => wsRef.current?.close(), []);
+
 
   const start = () => {
     if (!wsRef.current?.isOpen) {
