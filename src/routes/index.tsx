@@ -5,14 +5,63 @@ import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowDownRight, ArrowUpRight, Plug, Power, Zap, Activity } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Plug,
+  Power,
+  Zap,
+  Activity,
+  RefreshCw,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
 import {
   authorizeDeriv,
+  authorizeDerivAccount,
   buyRiseFall,
   round2,
   VOLATILITY_MARKETS,
+  type DerivAccount,
   type DerivWS,
 } from "@/lib/deriv";
+
+const STORE_KEY = "deriv-runs-bot-v1";
+
+interface Persisted {
+  token: string;
+  accountId: string;
+  symbol: string;
+  direction: string;
+  entryMode: string;
+  ticks: string;
+  stake: string;
+  martingale: string;
+  takeProfit: string;
+  stopLoss: string;
+  history: any[];
+  pnl: number;
+  wins: number;
+  losses: number;
+}
+
+function loadStore(): Partial<Persisted> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(STORE_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStore(patch: Partial<Persisted>) {
+  if (typeof window === "undefined") return;
+  try {
+    const next = { ...loadStore(), ...patch };
+    window.localStorage.setItem(STORE_KEY, JSON.stringify(next));
+  } catch {}
+}
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,42 +98,48 @@ interface TradeRow {
 }
 
 function TraderPage() {
-  const [token, setToken] = useState("");
+  const s = loadStore();
+  const [token, setToken] = useState(s.token || "");
   const [connecting, setConnecting] = useState(false);
   const [account, setAccount] = useState<{
     loginid: string;
     currency: string;
     mode: string;
   } | null>(null);
+  const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [balance, setBalance] = useState(0);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const [symbol, setSymbol] = useState("R_100");
-  const [direction, setDirection] = useState<Direction>("RUNHIGH");
-  const [entryMode, setEntryMode] = useState<EntryMode>("normal");
-  const [ticks, setTicks] = useState("2");
-  const [stake, setStake] = useState("0.35");
-  const [martingale, setMartingale] = useState("2");
-  const [takeProfit, setTakeProfit] = useState("10");
-  const [stopLoss, setStopLoss] = useState("10");
+  const [symbol, setSymbol] = useState(s.symbol || "R_100");
+  const [direction, setDirection] = useState<Direction>((s.direction as Direction) || "RUNHIGH");
+  const [entryMode, setEntryMode] = useState<EntryMode>((s.entryMode as EntryMode) || "normal");
+  const [ticks, setTicks] = useState(s.ticks || "2");
+  const [stake, setStake] = useState(s.stake || "0.35");
+  const [martingale, setMartingale] = useState(s.martingale || "2");
+  const [takeProfit, setTakeProfit] = useState(s.takeProfit || "10");
+  const [stopLoss, setStopLoss] = useState(s.stopLoss || "10");
 
   const [running, setRunning] = useState(false);
-  const [currentStake, setCurrentStake] = useState(0.35);
-  const [pnl, setPnl] = useState(0);
-  const [wins, setWins] = useState(0);
-  const [losses, setLosses] = useState(0);
+  const [currentStake, setCurrentStake] = useState(parseFloat(s.stake || "0.35") || 0.35);
+  const [pnl, setPnl] = useState(s.pnl ?? 0);
+  const [wins, setWins] = useState(s.wins ?? 0);
+  const [losses, setLosses] = useState(s.losses ?? 0);
   const [price, setPrice] = useState<string>("—");
   const [openTrades, setOpenTrades] = useState(0);
-  const [history, setHistory] = useState<TradeRow[]>([]);
+  const [history, setHistory] = useState<TradeRow[]>((s.history as TradeRow[]) || []);
+
 
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const wsRef = useRef<DerivWS | null>(null);
 
   const runningRef = useRef(false);
-  const currentStakeRef = useRef(0.35);
-  const pnlRef = useRef(0);
+  const currentStakeRef = useRef(parseFloat(s.stake || "0.35") || 0.35);
+  const pnlRef = useRef(s.pnl ?? 0);
   const openRef = useRef(0);
   const busyRef = useRef(false);
+  const tokenRef = useRef(s.token || "");
   const settledRef = useRef<Set<number>>(new Set());
+
   const cfgRef = useRef({
     symbol,
     direction,
@@ -237,37 +292,78 @@ function TraderPage() {
     }
   };
 
-  const connect = async () => {
-    // Fall back to the live input value: some browsers/paste flows don't fire change.
-    const raw = (tokenInputRef.current?.value || token).trim();
-    if (!raw) {
-      toast.error("Enter your Deriv PAT (or API) token");
-      return;
-    }
-    if (raw !== token) setToken(raw);
-    setConnecting(true);
-    try {
-      const res = await authorizeDeriv(raw);
-      wsRef.current = res.ws;
+  const connectRef = useRef<
+    ((t: string, a?: string, silent?: boolean) => Promise<void>) | null
+  >(null);
 
+  const attachSocket = useCallback(
+
+    (res: { ws: DerivWS; loginid: string; currency: string; mode: string }, rawToken: string) => {
+      wsRef.current = res.ws;
       setAccount({ loginid: res.loginid, currency: res.currency, mode: res.mode });
-      setBalance(res.balance);
       res.ws.onClose = () => {
-        stopBot("Deriv connection closed");
+        stopBot("Deriv connection closed — reconnecting…");
         setAccount(null);
+        // Automatic reconnect with the persisted token.
+        setTimeout(() => {
+          if (!wsRef.current || !wsRef.current.isOpen) {
+            connectRef.current?.(rawToken, loadStore().accountId, true).catch(() => {});
+          }
+        }, 3000);
       };
       res.ws.onMessage((msg) => {
         if (msg?.msg_type === "tick" && msg.tick) tickHandler.current(msg.tick);
-        if (msg?.msg_type === "balance" && msg.balance) setBalance(Number(msg.balance.balance ?? 0));
+        if (msg?.msg_type === "balance" && msg.balance)
+          setBalance(Number(msg.balance.balance ?? 0));
       });
       res.ws.send({ balance: 1, subscribe: 1 }).catch(() => {});
-      await startTicks(res.ws, symbol);
-      toast.success(`Connected as ${res.loginid} (${res.mode.toUpperCase()})`);
-    } catch (e: any) {
-      toast.error(e?.message || "Connection failed");
-    } finally {
-      setConnecting(false);
-    }
+    },
+    [stopBot]
+  );
+
+  const connectWith = useCallback(
+    async (rawToken: string, accountId?: string, silent = false) => {
+      const raw = (rawToken || "").trim();
+      if (!raw) {
+        if (!silent) toast.error("Enter your Deriv PAT (or API) token");
+        return;
+      }
+      setConnecting(true);
+      try {
+        const res = accountId
+          ? await authorizeDerivAccount(raw, accountId)
+          : await authorizeDeriv(raw);
+        tokenRef.current = raw;
+        setToken(raw);
+        setAccounts(res.accounts);
+        setBalance(res.balance);
+        saveStore({ token: raw, accountId: res.loginid });
+        attachSocket(res, raw);
+        await startTicks(res.ws, cfgRef.current.symbol);
+        if (!silent) toast.success(`Connected as ${res.loginid} (${res.mode.toUpperCase()})`);
+      } catch (e: any) {
+        if (!silent) toast.error(e?.message || "Connection failed");
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [attachSocket, startTicks]
+  );
+  connectRef.current = connectWith;
+
+
+
+  const connect = () => {
+    // Fall back to the live input value: some browsers/paste flows don't fire change.
+    const raw = (tokenInputRef.current?.value || token).trim();
+    connectWith(raw);
+  };
+
+  const switchAccount = async (accountId: string) => {
+    stopBot();
+    wsRef.current?.close();
+    wsRef.current = null;
+    await connectWith(tokenRef.current || token, accountId);
   };
 
   const disconnect = () => {
@@ -278,6 +374,59 @@ function TraderPage() {
     setPrice("—");
   };
 
+  /** Manual + continuous balance refresh */
+  const refreshBalance = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || !ws.isOpen) return;
+    ws.send({ balance: 1 })
+      .then((r: any) => {
+        if (r?.balance) setBalance(Number(r.balance.balance ?? 0));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh || !account) return;
+    const id = window.setInterval(refreshBalance, 250);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, account, refreshBalance]);
+
+  const clearHistory = () => {
+    setHistory([]);
+    saveStore({ history: [] });
+    toast.success("Trade history cleared");
+  };
+
+  const resetStats = () => {
+    pnlRef.current = 0;
+    setPnl(0);
+    setWins(0);
+    setLosses(0);
+    const base = round2(parseFloat(cfgRef.current.stake) || 0.35);
+    currentStakeRef.current = base;
+    setCurrentStake(base);
+    saveStore({ pnl: 0, wins: 0, losses: 0 });
+    toast.success("Stats reset");
+  };
+
+  /** Persist settings + stats */
+  useEffect(() => {
+    saveStore({ symbol, direction, entryMode, ticks, stake, martingale, takeProfit, stopLoss });
+  }, [symbol, direction, entryMode, ticks, stake, martingale, takeProfit, stopLoss]);
+
+  useEffect(() => {
+    saveStore({ history, pnl, wins, losses });
+  }, [history, pnl, wins, losses]);
+
+  /** Auto reconnect on load with the stored token */
+  const bootRef = useRef(false);
+  useEffect(() => {
+    if (bootRef.current) return;
+    bootRef.current = true;
+    const stored = loadStore();
+    if (stored.token) connectWith(stored.token, stored.accountId, true);
+  }, [connectWith]);
+
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || !ws.isOpen) return;
@@ -285,6 +434,7 @@ function TraderPage() {
   }, [symbol, startTicks]);
 
   useEffect(() => () => wsRef.current?.close(), []);
+
 
   const start = () => {
     if (!wsRef.current?.isOpen) {
@@ -298,12 +448,8 @@ function TraderPage() {
     }
     currentStakeRef.current = base;
     setCurrentStake(base);
-    pnlRef.current = 0;
-    setPnl(0);
-    setWins(0);
-    setLosses(0);
-    setHistory([]);
     runningRef.current = true;
+
     setRunning(true);
     toast.success(
       `Bot started — ${direction === "RUNHIGH" ? "UPS only" : "DOWNS only"}, ${Math.max(2, parseInt(ticks) || 2)} ticks`
@@ -385,22 +531,70 @@ function TraderPage() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Stat label="Account" value={account.loginid} />
-                <Stat label="Mode" value={account.mode.toUpperCase()} />
-                <Stat
-                  label="Balance"
-                  value={`${balance.toFixed(2)} ${account.currency}`}
-                  accent
-                />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Stat label="Account" value={account.loginid} />
+                  <Stat label="Mode" value={account.mode.toUpperCase()} />
+                  <Stat
+                    label="Balance"
+                    value={`${balance.toFixed(2)} ${account.currency}`}
+                    accent
+                  />
+                </div>
+                <Button variant="secondary" onClick={disconnect}>
+                  <Power className="mr-2 h-4 w-4" />
+                  Disconnect
+                </Button>
               </div>
-              <Button variant="secondary" onClick={disconnect}>
-                <Power className="mr-2 h-4 w-4" />
-                Disconnect
-              </Button>
+
+              <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
+                <div className="min-w-56 space-y-1.5">
+                  <Label
+                    htmlFor="acct"
+                    className="text-xs uppercase tracking-wide text-muted-foreground"
+                  >
+                    Account (real / demo)
+                  </Label>
+                  <select
+                    id="acct"
+                    value={account.loginid}
+                    disabled={running || connecting}
+                    onChange={(e) => switchAccount(e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-secondary px-3 text-sm"
+                  >
+                    {(accounts.length
+                      ? accounts
+                      : [
+                          {
+                            account_id: account.loginid,
+                            label: account.loginid,
+                            currency: account.currency,
+                            balance,
+                            is_virtual: false,
+                          },
+                        ]
+                    ).map((a) => (
+                      <option key={a.account_id} value={a.account_id}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button variant="secondary" onClick={refreshBalance}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Update balance
+                </Button>
+                <Button
+                  variant={autoRefresh ? "default" : "secondary"}
+                  onClick={() => setAutoRefresh((v) => !v)}
+                >
+                  Auto refresh {autoRefresh ? "on" : "off"}
+                </Button>
+              </div>
             </div>
           )}
+
         </section>
 
         {/* Settings */}
@@ -516,9 +710,22 @@ function TraderPage() {
 
         {/* History */}
         <section className="panel p-5">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Trade history
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Trade history
+            </h2>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={clearHistory}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Clear history
+              </Button>
+              <Button variant="secondary" size="sm" onClick={resetStats}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset stats
+              </Button>
+            </div>
+          </div>
+
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">No trades yet.</p>
           ) : (
