@@ -133,11 +133,13 @@ function TraderPage() {
   const wsRef = useRef<DerivWS | null>(null);
 
   const runningRef = useRef(false);
-  const currentStakeRef = useRef(0.35);
-  const pnlRef = useRef(0);
+  const currentStakeRef = useRef(parseFloat(s.stake || "0.35") || 0.35);
+  const pnlRef = useRef(s.pnl ?? 0);
   const openRef = useRef(0);
   const busyRef = useRef(false);
+  const tokenRef = useRef(s.token || "");
   const settledRef = useRef<Set<number>>(new Set());
+
   const cfgRef = useRef({
     symbol,
     direction,
