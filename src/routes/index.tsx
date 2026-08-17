@@ -361,13 +361,17 @@ function TraderPage() {
                   PAT / API token
                 </Label>
                 <Input
+                  ref={tokenInputRef}
                   id="token"
                   type="password"
+                  autoComplete="off"
                   placeholder="Paste your Deriv PAT token"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
+                  onInput={(e) => setToken((e.target as HTMLInputElement).value)}
                   className="bg-secondary"
                 />
+
               </div>
               <Button onClick={connect} disabled={connecting} className="md:w-40">
                 <Plug className="mr-2 h-4 w-4" />
