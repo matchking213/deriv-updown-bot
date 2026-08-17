@@ -236,14 +236,18 @@ function TraderPage() {
   };
 
   const connect = async () => {
-    if (!token.trim()) {
+    // Fall back to the live input value: some browsers/paste flows don't fire change.
+    const raw = (tokenInputRef.current?.value || token).trim();
+    if (!raw) {
       toast.error("Enter your Deriv PAT (or API) token");
       return;
     }
+    if (raw !== token) setToken(raw);
     setConnecting(true);
     try {
-      const res = await authorizeDeriv(token);
+      const res = await authorizeDeriv(raw);
       wsRef.current = res.ws;
+
       setAccount({ loginid: res.loginid, currency: res.currency, mode: res.mode });
       setBalance(res.balance);
       res.ws.onClose = () => {
