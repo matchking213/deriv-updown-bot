@@ -76,7 +76,9 @@ function TraderPage() {
   const [openTrades, setOpenTrades] = useState(0);
   const [history, setHistory] = useState<TradeRow[]>([]);
 
+  const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const wsRef = useRef<DerivWS | null>(null);
+
   const runningRef = useRef(false);
   const currentStakeRef = useRef(0.35);
   const pnlRef = useRef(0);
@@ -236,14 +238,18 @@ function TraderPage() {
   };
 
   const connect = async () => {
-    if (!token.trim()) {
+    // Fall back to the live input value: some browsers/paste flows don't fire change.
+    const raw = (tokenInputRef.current?.value || token).trim();
+    if (!raw) {
       toast.error("Enter your Deriv PAT (or API) token");
       return;
     }
+    if (raw !== token) setToken(raw);
     setConnecting(true);
     try {
-      const res = await authorizeDeriv(token);
+      const res = await authorizeDeriv(raw);
       wsRef.current = res.ws;
+
       setAccount({ loginid: res.loginid, currency: res.currency, mode: res.mode });
       setBalance(res.balance);
       res.ws.onClose = () => {
@@ -361,13 +367,17 @@ function TraderPage() {
                   PAT / API token
                 </Label>
                 <Input
+                  ref={tokenInputRef}
                   id="token"
                   type="password"
+                  autoComplete="off"
                   placeholder="Paste your Deriv PAT token"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
+                  onInput={(e) => setToken((e.target as HTMLInputElement).value)}
                   className="bg-secondary"
                 />
+
               </div>
               <Button onClick={connect} disabled={connecting} className="md:w-40">
                 <Plug className="mr-2 h-4 w-4" />
