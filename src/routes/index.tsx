@@ -5,14 +5,63 @@ import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowDownRight, ArrowUpRight, Plug, Power, Zap, Activity } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Plug,
+  Power,
+  Zap,
+  Activity,
+  RefreshCw,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
 import {
   authorizeDeriv,
+  authorizeDerivAccount,
   buyRiseFall,
   round2,
   VOLATILITY_MARKETS,
+  type DerivAccount,
   type DerivWS,
 } from "@/lib/deriv";
+
+const STORE_KEY = "deriv-runs-bot-v1";
+
+interface Persisted {
+  token: string;
+  accountId: string;
+  symbol: string;
+  direction: string;
+  entryMode: string;
+  ticks: string;
+  stake: string;
+  martingale: string;
+  takeProfit: string;
+  stopLoss: string;
+  history: any[];
+  pnl: number;
+  wins: number;
+  losses: number;
+}
+
+function loadStore(): Partial<Persisted> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(STORE_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStore(patch: Partial<Persisted>) {
+  if (typeof window === "undefined") return;
+  try {
+    const next = { ...loadStore(), ...patch };
+    window.localStorage.setItem(STORE_KEY, JSON.stringify(next));
+  } catch {}
+}
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
