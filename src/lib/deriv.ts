@@ -184,6 +184,71 @@ export class DerivWS {
   }
 }
 
+function normalizeAccount(a: any): DerivAccount {
+  const id = String(a?.account_id || a?.id || a?.loginid || "");
+  const isVirtual =
+    a?.is_virtual === true ||
+    a?.is_virtual === 1 ||
+    String(a?.account_type || a?.type || "").toLowerCase().includes("demo") ||
+    String(a?.account_category || "").toLowerCase().includes("demo") ||
+    /^VR/i.test(id);
+  return {
+    account_id: id,
+    currency: String(a?.currency ?? "USD"),
+    balance: Number(a?.balance ?? 0),
+    is_virtual: isVirtual,
+    label: `${isVirtual ? "Demo" : "Real"} · ${id} (${String(a?.currency ?? "USD")})`,
+  };
+}
+
+/** List all Deriv options accounts (real + demo) linked to a PAT token. */
+export async function listDerivAccounts(rawToken: string): Promise<DerivAccount[]> {
+  const token = rawToken.trim();
+  const res = await derivRest<{ data?: any[] | any }>("/accounts", token, { method: "GET" });
+  const raw = Array.isArray(res.data) ? res.data : res.data ? [res.data] : [];
+  return raw.map(normalizeAccount).filter((a) => a.account_id);
+}
+
+async function connectPatAccount(
+  token: string,
+  account: DerivAccount,
+  accounts: DerivAccount[]
+): Promise<DerivAuthResult> {
+  const otpResponse = await derivRest<{ data?: { url?: string; websocket_url?: string } }>(
+    `/accounts/${encodeURIComponent(account.account_id)}/otp`,
+    token,
+    { method: "POST" }
+  );
+
+  const websocketUrl = String(otpResponse.data?.url || otpResponse.data?.websocket_url || "");
+  if (!websocketUrl) throw new Error("Deriv PAT API did not return a WebSocket URL");
+
+  const ws = new DerivWS();
+  ws.mode = "pat";
+  await ws.connect(withAppId(websocketUrl));
+
+  return {
+    ws,
+    loginid: account.account_id,
+    currency: account.currency,
+    balance: account.balance,
+    mode: "pat",
+    accounts,
+  };
+}
+
+/** Connect to a specific PAT account id (used by the real/demo switcher). */
+export async function authorizeDerivAccount(
+  rawToken: string,
+  accountId: string
+): Promise<DerivAuthResult> {
+  const token = rawToken.trim();
+  const accounts = await listDerivAccounts(token);
+  const account = accounts.find((a) => a.account_id === accountId) || accounts[0];
+  if (!account) throw new Error("No Deriv options account found for this PAT token");
+  return connectPatAccount(token, account, accounts);
+}
+
 export async function authorizeDeriv(rawToken: string): Promise<DerivAuthResult> {
   const token = rawToken.trim();
   if (!token) throw new Error("Empty token");
@@ -197,54 +262,25 @@ export async function authorizeDeriv(rawToken: string): Promise<DerivAuthResult>
     await ws.connect();
     const auth = await ws.send<any>({ authorize: token });
     if (!auth?.authorize) throw new Error("Invalid token (legacy)");
+    const list: any[] = Array.isArray(auth.authorize.account_list)
+      ? auth.authorize.account_list
+      : [];
     return {
       ws,
       loginid: auth.authorize.loginid,
       currency: auth.authorize.currency || "USD",
       balance: Number(auth.authorize.balance ?? 0),
       mode,
+      accounts: (list.length ? list : [auth.authorize]).map(normalizeAccount),
     };
   }
 
   // ==================== PAT ====================
-  const accountsResponse = await derivRest<{ data?: any[] | any }>("/accounts", token, {
-    method: "GET",
-  });
+  const accounts = await listDerivAccounts(token);
+  const account = accounts.find((a) => !a.is_virtual) || accounts[0];
+  if (!account) throw new Error("No Deriv options account found for this PAT token");
+  return connectPatAccount(token, account, accounts);
 
-  const accounts = Array.isArray(accountsResponse.data)
-    ? accountsResponse.data
-    : accountsResponse.data
-      ? [accountsResponse.data]
-      : [];
-
-  const account = accounts.find((a) => a?.status === "active") || accounts[0];
-
-  const accountId = String(account?.account_id || account?.id || account?.loginid || "");
-
-  if (!accountId) throw new Error("No Deriv options account found for this PAT token");
-
-  const otpResponse = await derivRest<{ data?: { url?: string; websocket_url?: string } }>(
-    `/accounts/${encodeURIComponent(accountId)}/otp`,
-    token,
-    { method: "POST" }
-  );
-
-  const websocketUrl = String(otpResponse.data?.url || otpResponse.data?.websocket_url || "");
-
-  if (!websocketUrl) throw new Error("Deriv PAT API did not return a WebSocket URL");
-
-  const ws = new DerivWS();
-  ws.mode = "pat";
-  await ws.connect(websocketUrl);
-
-  return {
-    ws,
-    loginid: accountId,
-    currency: String(account?.currency ?? "USD"),
-    balance: Number(account?.balance ?? 0),
-    mode,
-  };
-}
 
 export interface BuyResult {
   contract_id: number;
