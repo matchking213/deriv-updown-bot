@@ -452,7 +452,8 @@ function TraderPage() {
     setPnl(0);
     setWins(0);
     setLosses(0);
-    setHistory([]);
+    runningRef.current = true;
+
     runningRef.current = true;
     setRunning(true);
     toast.success(
