@@ -76,7 +76,9 @@ function TraderPage() {
   const [openTrades, setOpenTrades] = useState(0);
   const [history, setHistory] = useState<TradeRow[]>([]);
 
+  const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const wsRef = useRef<DerivWS | null>(null);
+
   const runningRef = useRef(false);
   const currentStakeRef = useRef(0.35);
   const pnlRef = useRef(0);
